@@ -58,22 +58,22 @@ impl Parser{
     
     // This handles +,- and %
     fn parse_mul_div(&mut self)->Result<f64,String>{
-        let mut result=self.parse_power()?;
+        let mut result=self.parse_unary()?;
         loop{
             match self.tokens.get(self.position){
                 Some(Token::devide)=>{
                     self.position+=1;
-                    let right=self.parse_power()?;
+                    let right=self.parse_unary()?;
                     result=super::operations::devide(result, right)?;
                 }
                 Some(Token::multiply)=>{
                     self.position+=1;
-                    let right=self.parse_power()?;
+                    let right=self.parse_unary()?;
                     result*=right;
                 }
                 Some(Token::identifier(name)) if name=="mod" =>{
                     self.position+=1;
-                    let right=self.parse_power()?;
+                    let right=self.parse_unary()?;
                     result=super::operations::modulo(result, right)?;
                 }
                 _ => break,
@@ -82,17 +82,6 @@ impl Parser{
         Ok(result)
     }
 
-    // This handles power
-    fn parse_power(&mut self)-> Result<f64,String>{
-        let left=self.parse_unary()?;
-        if let Some(Token::power) = self.tokens.get(self.position){
-            self.position+=1;
-            let right=self.parse_power()?;
-            return Ok(left.powf(right));
-        }
-        Ok(left)
-    }
-    
     // Its job is to evaluate -5 as negative of 5
     fn parse_unary(&mut self) -> Result<f64,String>{
         match self.tokens.get(self.position){
@@ -105,8 +94,19 @@ impl Parser{
                 let value=self.parse_unary()?;
                 Ok(-value)
             }
-            _ => self.parse_postfix(),
+            _ => self.parse_power(),
         }
+    }
+
+    // This handles power
+    fn parse_power(&mut self)-> Result<f64,String>{
+        let left=self.parse_postfix()?;
+        if let Some(Token::power) = self.tokens.get(self.position){
+            self.position+=1;
+            let right=self.parse_unary()?;
+            return Ok(left.powf(right));
+        }
+        Ok(left)
     }
     
     // Handels operator like ! which comes after the digit
@@ -194,4 +194,23 @@ impl Parser{
         }
     }
     
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn eval(input: &str) -> Result<f64, String> {
+        let tokens = super::super::token::tokenize(input)?;
+        let mut parser = Parser::new(tokens);
+        parser.parse_expression()
+    }
+
+    #[test]
+    fn test_power_precedence() {
+        assert_eq!(eval("-2^2"), Ok(-4.0));
+        assert_eq!(eval("(-2)^2"), Ok(4.0));
+        assert_eq!(eval("2^-3"), Ok(0.125));
+        assert_eq!(eval("-2^3"), Ok(-8.0));
+    }
 }
